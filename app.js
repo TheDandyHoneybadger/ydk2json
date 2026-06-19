@@ -1,7 +1,9 @@
 const YGOPRODECK_API = "https://db.ygoprodeck.com/api/v7/cardinfo.php";
-const CACHE_KEY = "ydke-web-konami-cache-v1";
+const CACHE_KEY = "ydke-web-konami-cache-v2";
 const REQUEST_DELAY_MS = 120;
 const MAX_RETRIES = 3;
+const ALWAYS_INCLUDED_SECTIONS = ["main", "extra", "side"];
+
 const EXTRA_TYPES = new Set([
   "fusion monster",
   "synchro monster",
@@ -27,7 +29,6 @@ const els = {
   deckInput: $("#deckInput"),
   ydkFile: $("#ydkFile"),
   dropZone: $("#dropZone"),
-  indent: $("#indent"),
   output: $("#output"),
   log: $("#log"),
   summary: $("#summary"),
@@ -52,7 +53,7 @@ function saveCache() {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(state.cache));
   } catch (error) {
-    log(`⚠ Não foi possível salvar o cache local: ${error.message}`);
+    log(`⚠ Could not save the local cache: ${error.message}`);
   }
 }
 
@@ -61,7 +62,7 @@ function sleep(ms) {
 }
 
 function log(message) {
-  const now = new Date().toLocaleTimeString("pt-BR", { hour12: false });
+  const now = new Date().toLocaleTimeString("en-US", { hour12: false });
   els.log.textContent += `[${now}] ${message}\n`;
   els.log.scrollTop = els.log.scrollHeight;
 }
@@ -80,7 +81,7 @@ function setSummary(message, mode = "ready") {
 
 function setBusy(isBusy) {
   els.convertBtn.disabled = isBusy;
-  els.convertBtn.textContent = isBusy ? "Convertendo..." : "Converter deck";
+  els.convertBtn.textContent = isBusy ? "Converting..." : "Convert deck";
 }
 
 function safeDecodeURIComponent(text) {
@@ -100,23 +101,22 @@ function normalizeBase64(text) {
 function decodeYdke(url) {
   const trimmed = url.trim();
   if (!trimmed.startsWith("ydke://")) {
-    throw new Error("O código YDKE precisa começar com ydke://");
+    throw new Error("The YDKE code must start with ydke://");
   }
 
   const payload = trimmed.slice("ydke://".length);
   const parts = payload.split("!");
   while (parts.length < 3) parts.push("");
 
-  const sectionNames = ["main", "extra", "side"];
   const sections = { main: [], extra: [], side: [] };
 
-  sectionNames.forEach((name, index) => {
+  ALWAYS_INCLUDED_SECTIONS.forEach((name, index) => {
     const segment = parts[index] || "";
     if (!segment) return;
 
     const binary = atob(normalizeBase64(segment));
     if (binary.length % 4 !== 0) {
-      throw new Error(`Seção ${name} do YDKE está inválida: bytes não múltiplos de 4.`);
+      throw new Error(`The ${name} YDKE section is invalid: byte length is not a multiple of 4.`);
     }
 
     for (let i = 0; i < binary.length; i += 4) {
@@ -153,21 +153,12 @@ function parseYdk(text) {
 
 function detectAndParse(input) {
   const text = input.trim();
-  if (!text) throw new Error("Cole um código YDKE ou importe/cole um arquivo .ydk.");
+  if (!text) throw new Error("Paste a YDKE code or import/paste a .ydk file.");
   return text.startsWith("ydke://") ? decodeYdke(text) : parseYdk(text);
 }
 
-function getSelectedSections() {
-  const values = Array.from(document.querySelectorAll('input[name="section"]:checked')).map((input) => input.value);
-  return values.length ? values : ["main"];
-}
-
-function getFormat() {
-  return document.querySelector('input[name="format"]:checked')?.value || "dracotail";
-}
-
-function getAllIds(sections, includeSections) {
-  return includeSections.flatMap((section) => sections[section] || []);
+function getAllIds(sections) {
+  return ALWAYS_INCLUDED_SECTIONS.flatMap((section) => sections[section] || []);
 }
 
 async function fetchBatch(ids) {
@@ -181,14 +172,14 @@ async function fetchBatch(ids) {
     url.searchParams.set("misc", "yes");
     url.searchParams.set("includeAliased", "yes");
 
-    log(`YGOPRODECK: ${chunk.length} carta(s) [${start + 1}-${start + chunk.length} de ${ids.length}]`);
+    log(`YGOPRODECK: ${chunk.length} card(s) [${start + 1}-${start + chunk.length} of ${ids.length}]`);
 
     let success = false;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt += 1) {
       try {
         const response = await fetch(url.toString(), { headers: { Accept: "application/json" } });
         if (response.status === 404) {
-          log("⚠ A API não encontrou uma ou mais cartas deste lote.");
+          log("⚠ The API did not find one or more cards in this batch.");
           success = true;
           break;
         }
@@ -209,14 +200,16 @@ async function fetchBatch(ids) {
         break;
       } catch (error) {
         if (attempt === MAX_RETRIES) {
-          throw new Error(`Erro ao consultar YGOPRODECK: ${error.message}. Se estiver no GitHub Pages, verifique também bloqueio de internet/CORS no navegador.`);
+          throw new Error(
+            `Could not reach YGOPRODECK: ${error.message}. If this is running on GitHub Pages, also check your connection, ad blocker, or browser CORS/network restrictions.`
+          );
         }
-        log(`Tentativa ${attempt} falhou. Tentando novamente...`);
+        log(`Attempt ${attempt} failed. Retrying...`);
         await sleep(800);
       }
     }
 
-    if (!success) log("⚠ Lote ignorado por falha na API.");
+    if (!success) log("⚠ Batch skipped because the API failed.");
     await sleep(REQUEST_DELAY_MS);
   }
 
@@ -247,7 +240,7 @@ async function resolveBulk(ids) {
     }
     saveCache();
   } else {
-    log(`Cache local: ${uniqueIds.length} carta(s) já resolvidas.`);
+    log(`Local cache: ${uniqueIds.length} card(s) already resolved.`);
   }
 
   return ids.map((id) => state.cache[String(id)]);
@@ -270,25 +263,19 @@ function requireKonamiId(info, passcode) {
   if (info.konami_id === null || info.konami_id === undefined) {
     const name = info.name || `Unknown(${passcode})`;
     throw new Error(
-      `YGOPRODECK não retornou konami_id para '${name}' (passcode/YDK: ${passcode}). ` +
-      "CardDatabaseId precisa usar o konami_id exato da Konami. Limpe o cache e tente novamente se a carta já estiver cadastrada na base oficial."
+      `YGOPRODECK did not return a konami_id for '${name}' (YDK/passcode: ${passcode}). ` +
+      "CardDatabaseId must use the exact Konami ID. Clear the cache and try again if this card already exists in the official database."
     );
   }
   return Number(info.konami_id);
 }
 
-async function buildSimpleJson(sections, includeSections) {
-  const allIds = getAllIds(sections, includeSections);
-  const cards = await resolveBulk(allIds);
-  return { card: cards.map((card) => card.name) };
-}
-
-async function buildDracotailJson(sections, includeSections, deckName) {
-  const allIds = getAllIds(sections, includeSections);
+async function buildDracotailJson(sections, deckName) {
+  const allIds = getAllIds(sections);
   await resolveBulk(allIds);
 
   const counts = new Map();
-  for (const ydkeSection of includeSections) {
+  for (const ydkeSection of ALWAYS_INCLUDED_SECTIONS) {
     for (const passcode of sections[ydkeSection] || []) {
       const info = resolve(passcode);
       const label = cardSection(info.card_type, ydkeSection);
@@ -307,7 +294,7 @@ async function buildDracotailJson(sections, includeSections, deckName) {
   };
 
   const seen = new Set();
-  for (const ydkeSection of includeSections) {
+  for (const ydkeSection of ALWAYS_INCLUDED_SECTIONS) {
     for (const passcode of sections[ydkeSection] || []) {
       const info = resolve(passcode);
       const label = cardSection(info.card_type, ydkeSection);
@@ -324,11 +311,7 @@ async function buildDracotailJson(sections, includeSections, deckName) {
   return result;
 }
 
-function summarize(result, format) {
-  if (format === "simple") {
-    return `✔ ${result.card?.length || 0} cartas convertidas.`;
-  }
-
+function summarize(result) {
   const total = (section) => (result[section] || []).reduce((sum, card) => sum + card.Quantity, 0);
   const main = total("Monsters") + total("Spells") + total("Traps");
   return `✔ Main: ${main}  |  Extra: ${total("Extra")}  |  Side: ${total("Side")}`;
@@ -347,41 +330,37 @@ async function runConversion(event) {
   event?.preventDefault();
   els.log.textContent = "";
   setBusy(true);
-  setStatus("Convertendo", "busy");
-  setSummary("Consultando cartas e montando JSON...", "warn");
+  setStatus("Converting", "busy");
+  setSummary("Resolving cards and building compact JSON...", "warn");
 
   try {
     const input = els.deckInput.value;
     const sections = detectAndParse(input);
-    const includeSections = getSelectedSections();
-    const format = getFormat();
     const deckName = els.deckName.value.trim() || "My Deck";
-    const totalCards = getAllIds(sections, includeSections).length;
+    const totalCards = getAllIds(sections).length;
 
     if (!totalCards) {
-      throw new Error("Nenhuma carta encontrada nas seções selecionadas.");
+      throw new Error("No cards were found in Main, Extra, or Side.");
     }
 
-    log(`Seções selecionadas: ${includeSections.join(", ")}`);
-    log(`Total bruto: ${totalCards} carta(s).`);
+    log(`Fixed format: Dracotail / Konami strict.`);
+    log(`Fixed sections: ${ALWAYS_INCLUDED_SECTIONS.join(", ")}.`);
+    log(`Raw total: ${totalCards} card(s).`);
 
-    const result = format === "dracotail"
-      ? await buildDracotailJson(sections, includeSections, deckName)
-      : await buildSimpleJson(sections, includeSections);
+    const result = await buildDracotailJson(sections, deckName);
 
-    const indent = Number(els.indent.value);
-    state.lastJson = JSON.stringify(result, null, indent > 0 ? indent : 0);
+    state.lastJson = JSON.stringify(result);
     state.lastDeckName = deckName;
     els.output.textContent = state.lastJson;
 
-    setSummary(summarize(result, format));
-    setStatus("Concluído");
-    log("Conversão concluída.");
+    setSummary(summarize(result));
+    setStatus("Done");
+    log("Conversion completed.");
   } catch (error) {
     state.lastJson = "";
-    els.output.textContent = `Erro:\n\n${error.message}`;
+    els.output.textContent = `Error:\n\n${error.message}`;
     setSummary(error.message, "error");
-    setStatus("Erro", "error");
+    setStatus("Error", "error");
     log(`✗ ${error.message}`);
   } finally {
     setBusy(false);
@@ -393,7 +372,7 @@ async function readFile(file) {
   els.deckInput.value = text;
   const stem = file.name.replace(/\.[^.]+$/, "");
   if (stem) els.deckName.value = stem;
-  setSummary(`Arquivo '${file.name}' carregado. Clique em converter.`, "warn");
+  setSummary(`File '${file.name}' loaded. Click convert.`, "warn");
 }
 
 els.form.addEventListener("submit", runConversion);
@@ -427,19 +406,19 @@ els.clearBtn.addEventListener("click", () => {
   els.output.textContent = "";
   els.log.textContent = "";
   state.lastJson = "";
-  setSummary("Cole um deck e clique em converter.");
-  setStatus("Pronto");
+  setSummary("Paste a deck and click convert.");
+  setStatus("Ready");
 });
 
 els.clearCacheBtn.addEventListener("click", () => {
   state.cache = {};
   localStorage.removeItem(CACHE_KEY);
-  setSummary("Cache local limpo.", "warn");
-  log("Cache local limpo.");
+  setSummary("Local cache cleared.", "warn");
+  log("Local cache cleared.");
 });
 
 els.copyBtn.addEventListener("click", async () => {
-  if (!state.lastJson) return setSummary("Nenhum JSON gerado para copiar.", "warn");
+  if (!state.lastJson) return setSummary("No generated JSON to copy.", "warn");
   try {
     await navigator.clipboard.writeText(state.lastJson);
   } catch {
@@ -453,11 +432,11 @@ els.copyBtn.addEventListener("click", async () => {
     document.execCommand("copy");
     textarea.remove();
   }
-  setSummary("JSON copiado para a área de transferência.");
+  setSummary("JSON copied to clipboard.");
 });
 
 els.downloadBtn.addEventListener("click", () => {
-  if (!state.lastJson) return setSummary("Nenhum JSON gerado para baixar.", "warn");
+  if (!state.lastJson) return setSummary("No generated JSON to download.", "warn");
   const blob = new Blob([state.lastJson], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
