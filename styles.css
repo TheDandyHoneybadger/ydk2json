@@ -77,6 +77,29 @@ h2 { font-size: 1.05rem; }
   max-width: 760px;
 }
 
+.tutorial-card {
+  padding: clamp(16px, 2.4vw, 20px);
+}
+
+.tutorial-head {
+  margin-bottom: 12px;
+}
+
+.tutorial-list {
+  margin: 0;
+  padding-left: 1.3rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.tutorial-list li + li {
+  margin-top: 6px;
+}
+
+.tutorial-list strong {
+  color: var(--text);
+}
+
 .status-pill {
   flex: 0 0 auto;
   padding: 10px 14px;
@@ -136,7 +159,7 @@ h2 { font-size: 1.05rem; }
 
 .grow-field {
   flex: 1;
-  min-height: 180px;
+  min-height: 110px;
 }
 
 .field span {
@@ -156,8 +179,8 @@ input[type="text"], textarea {
 }
 
 textarea {
-  min-height: clamp(180px, 31svh, 390px);
-  height: 100%;
+  min-height: clamp(120px, 18svh, 230px);
+  height: auto;
   resize: vertical;
   font-family: "Cascadia Code", Consolas, monospace;
   line-height: 1.45;
@@ -191,29 +214,6 @@ input:focus, textarea:focus {
 .file-drop input { display: none; }
 .file-icon { font-size: 2rem; }
 .file-drop small { color: var(--muted); }
-
-.drop-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.drop-grid .file-drop {
-  margin-bottom: 0;
-  min-height: 132px;
-}
-
-.ocr-note {
-  margin: 0 0 12px;
-  border: 1px solid rgba(78, 204, 163, 0.22);
-  border-radius: 16px;
-  padding: 12px;
-  color: var(--accent-2);
-  background: rgba(78, 204, 163, 0.07);
-  font-size: 0.9rem;
-  line-height: 1.45;
-}
 
 .disclaimer {
   margin: 0 0 16px;
@@ -289,8 +289,8 @@ input:focus, textarea:focus {
 
 .output {
   flex: 1;
-  min-height: clamp(260px, 45svh, 640px);
-  max-height: calc(100svh - 280px);
+  min-height: clamp(180px, 28svh, 360px);
+  max-height: calc(100svh - 360px);
   margin: 0;
   white-space: pre;
   overflow: auto;
@@ -337,7 +337,7 @@ input:focus, textarea:focus {
 
   .output {
     max-height: none;
-    min-height: clamp(260px, 42svh, 520px);
+    min-height: clamp(180px, 28svh, 360px);
   }
 }
 
@@ -355,10 +355,6 @@ input:focus, textarea:focus {
     padding: 16px;
   }
 
-  .drop-grid {
-    grid-template-columns: 1fr;
-  }
-
   .actions > button {
     width: 100%;
   }
@@ -374,10 +370,10 @@ input:focus, textarea:focus {
   }
 
   textarea {
-    min-height: 32svh;
+    min-height: 22svh;
   }
 
   .output {
-    min-height: 38svh;
+    min-height: 28svh;
   }
 }

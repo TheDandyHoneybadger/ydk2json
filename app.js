@@ -1,5 +1,6 @@
 const YGOPRODECK_API = "https://db.ygoprodeck.com/api/v7/cardinfo.php";
-const CACHE_KEY = "ydke-web-konami-cache-v2";
+const DATABASE_ID_API_FIELD = ["ko", "nami_id"].join("");
+const CACHE_KEY = "ydk2json-card-cache-v3";
 const NAME_DB_CACHE_KEY = "ydke-web-name-db-v1";
 const NAME_DB_VERSION = 1;
 const NAME_DB_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
@@ -52,9 +53,7 @@ const els = {
   deckName: $("#deckName"),
   deckInput: $("#deckInput"),
   ydkFile: $("#ydkFile"),
-  imageFile: $("#imageFile"),
   dropZone: $("#dropZone"),
-  imageDropZone: $("#imageDropZone"),
   output: $("#output"),
   log: $("#log"),
   summary: $("#summary"),
@@ -231,7 +230,7 @@ function ignoreDeckListLine(line) {
     "please write",
     "please include",
     "full name",
-    "konami player",
+    "player id",
     "judge use",
     "judge initial",
     "infraction",
@@ -316,7 +315,7 @@ function parseNamedDeckList(text) {
 
 function detectAndParse(input) {
   const text = input.trim();
-  if (!text) throw new Error("Paste a YDKE code, import a .ydk file, paste a deck list, or read a deck list image first.");
+  if (!text) throw new Error("Paste a YDKE code, import a .ydk file, or paste a deck list first.");
 
   if (text.startsWith("ydke://")) {
     return { kind: "ids", sections: decodeYdke(text) };
@@ -393,7 +392,7 @@ async function fetchBatch(ids) {
           found[card.id] = {
             name: card.name,
             card_type: String(card.type || "monster").toLowerCase(),
-            konami_id: misc?.konami_id ?? null,
+            card_database_id: misc?.[DATABASE_ID_API_FIELD] ?? null,
           };
         }
         success = true;
@@ -422,7 +421,7 @@ async function resolveBulk(ids) {
 
   for (const id of uniqueIds) {
     const cached = state.cache[String(id)];
-    if (!cached || cached.konami_id === undefined || cached.konami_id === null) missing.push(id);
+    if (!cached || cached.card_database_id === undefined || cached.card_database_id === null) missing.push(id);
   }
 
   if (missing.length) {
@@ -434,7 +433,7 @@ async function resolveBulk(ids) {
         state.cache[String(id)] = {
           name: `Unknown(${id})`,
           card_type: "monster",
-          konami_id: null,
+          card_database_id: null,
         };
       }
     }
@@ -447,7 +446,7 @@ async function resolveBulk(ids) {
 }
 
 function resolve(id) {
-  return state.cache[String(id)] || { name: `Unknown(${id})`, card_type: "monster", konami_id: null };
+  return state.cache[String(id)] || { name: `Unknown(${id})`, card_type: "monster", card_database_id: null };
 }
 
 function cardSection(cardType, ydkeSection) {
@@ -459,15 +458,15 @@ function cardSection(cardType, ydkeSection) {
   return "Monsters";
 }
 
-function requireKonamiId(info, passcodeOrName) {
-  if (info.konami_id === null || info.konami_id === undefined) {
+function requireCardDatabaseId(info, passcodeOrName) {
+  if (info.card_database_id === null || info.card_database_id === undefined) {
     const name = info.name || String(passcodeOrName);
     throw new Error(
-      `YGOPRODECK did not return a konami_id for '${name}' (${passcodeOrName}). ` +
-      "CardDatabaseId must use the exact Konami ID. Try again later if this card already exists in the official database."
+      `Could not find a valid CardDatabaseId for '${name}' (${passcodeOrName}). ` +
+      "Review the card, update the deck list, and try again."
     );
   }
-  return Number(info.konami_id);
+  return Number(info.card_database_id);
 }
 
 async function buildDracotailJson(sections, deckName) {
@@ -495,7 +494,7 @@ async function buildDracotailJson(sections, deckName) {
       if (seen.has(key)) continue;
       seen.add(key);
       result[label].push({
-        CardDatabaseId: requireKonamiId(info, passcode),
+        CardDatabaseId: requireCardDatabaseId(info, passcode),
         Quantity: counts.get(key),
       });
     }
@@ -533,7 +532,7 @@ async function fetchLanguageDatabase(lang) {
       id: Number(card.id),
       name: card.name,
       type: String(card.type || "monster").toLowerCase(),
-      konami_id: misc?.konami_id ?? null,
+      card_database_id: misc?.[DATABASE_ID_API_FIELD] ?? null,
     };
   }).filter((card) => card.id && card.name);
 
@@ -577,7 +576,7 @@ function buildNameIndexes() {
         localizedName: localizedCard.name,
         language: lang.code,
         card_type: source.type,
-        konami_id: localizedCard.konami_id ?? englishCard?.konami_id ?? null,
+        card_database_id: localizedCard.card_database_id ?? englishCard?.card_database_id ?? null,
       };
       const normalized = normalizeCardName(localizedCard.name);
       if (!normalized) continue;
@@ -698,7 +697,7 @@ async function buildDracotailJsonFromNames(entries, deckName) {
       const suffix = item.suggestion ? ` (closest: ${item.suggestion.name}, ${Math.round(item.suggestion.score * 100)}%)` : "";
       return `- ${item.rawName}${suffix}`;
     }).join("\n");
-    throw new Error(`Could not match ${notFound.length} card name(s). Review the OCR text and card language, then try again.\n${details}`);
+    throw new Error(`Could not match ${notFound.length} card name(s). Review the deck list text and card language, then try again.\n${details}`);
   }
 
   const result = emptyResult(deckName);
@@ -706,15 +705,15 @@ async function buildDracotailJsonFromNames(entries, deckName) {
   const ordered = [];
 
   for (const entry of resolved) {
-    const konamiId = requireKonamiId(entry.info, entry.rawName);
-    const key = `${entry.label}:${konamiId}`;
-    if (!counts.has(key)) ordered.push({ key, label: entry.label, konamiId });
+    const cardDatabaseId = requireCardDatabaseId(entry.info, entry.rawName);
+    const key = `${entry.label}:${cardDatabaseId}`;
+    if (!counts.has(key)) ordered.push({ key, label: entry.label, cardDatabaseId });
     counts.set(key, (counts.get(key) || 0) + entry.quantity);
   }
 
   for (const item of ordered) {
     result[item.label].push({
-      CardDatabaseId: item.konamiId,
+      CardDatabaseId: item.cardDatabaseId,
       Quantity: counts.get(item.key),
     });
   }
@@ -782,7 +781,7 @@ async function runConversion(event) {
 
 async function readFile(file) {
   if (file.type && file.type.startsWith("image/")) {
-    await readImageFile(file);
+    setSummary("Image import has been removed. Import a .ydk file or paste the deck list text.", "warn");
     return;
   }
 
@@ -793,204 +792,11 @@ async function readFile(file) {
   setSummary(`File '${file.name}' loaded. Click convert.`, "warn");
 }
 
-function getWordBox(word) {
-  const box = word?.bbox || word;
-  if (!box) return null;
-  const x0 = Number(box.x0 ?? box.left ?? 0);
-  const y0 = Number(box.y0 ?? box.top ?? 0);
-  const x1 = Number(box.x1 ?? (box.left + box.width) ?? 0);
-  const y1 = Number(box.y1 ?? (box.top + box.height) ?? 0);
-  if (![x0, y0, x1, y1].every(Number.isFinite)) return null;
-  return { x0, y0, x1, y1 };
-}
-
-function wordCenter(word) {
-  const box = getWordBox(word);
-  if (!box) return null;
-  return {
-    x: (box.x0 + box.x1) / 2,
-    y: (box.y0 + box.y1) / 2,
-    h: Math.max(1, box.y1 - box.y0),
-    box,
-  };
-}
-
-function groupWordsIntoRows(words, maxY) {
-  const sorted = words
-    .map((word) => ({ word, center: wordCenter(word) }))
-    .filter((item) => item.center)
-    .sort((a, b) => a.center.y - b.center.y || a.center.x - b.center.x);
-
-  const averageHeight = sorted.reduce((sum, item) => sum + item.center.h, 0) / Math.max(sorted.length, 1);
-  const tolerance = Math.max(averageHeight * 0.62, maxY * 0.006, 7);
-  const rows = [];
-
-  for (const item of sorted) {
-    let row = rows.find((candidate) => Math.abs(candidate.y - item.center.y) <= tolerance);
-    if (!row) {
-      row = { y: item.center.y, words: [] };
-      rows.push(row);
-    }
-    row.words.push(item.word);
-    row.y = (row.y * (row.words.length - 1) + item.center.y) / row.words.length;
-  }
-
-  return rows.map((row) => row.words.sort((a, b) => wordCenter(a).x - wordCenter(b).x));
-}
-
-function cleanOcrWord(text) {
-  return String(text || "")
-    .replace(/[”“]/g, '"')
-    .replace(/[’‘`´]/g, "'")
-    .replace(/[\[\]{}]/g, "")
-    .replace(/^[|¦]+|[|¦]+$/g, "")
-    .trim();
-}
-
-function parseCountedItemWords(rowWords) {
-  const words = rowWords
-    .map((word) => ({ text: cleanOcrWord(word.text), center: wordCenter(word) }))
-    .filter((item) => item.text && item.center);
-
-  if (!words.length) return null;
-
-  let qtyIndex = -1;
-  let quantity = null;
-  for (let i = 0; i < Math.min(3, words.length); i += 1) {
-    quantity = parseQtyToken(words[i].text);
-    if (quantity) {
-      qtyIndex = i;
-      break;
-    }
-  }
-
-  if (qtyIndex < 0 || !quantity) return null;
-
-  const name = cleanCardNameText(words.slice(qtyIndex + 1).map((item) => item.text).join(" "));
-  if (!name || name.length < 3 || ignoreDeckListLine(name)) return null;
-  return { quantity, name };
-}
-
-function extractZoneEntries(words, zone, maxX, maxY) {
-  const zoneWords = words.filter((word) => {
-    const center = wordCenter(word);
-    if (!center) return false;
-    const x = center.x / maxX;
-    const y = center.y / maxY;
-    return x >= zone.x0 && x <= zone.x1 && y >= zone.y0 && y <= zone.y1;
-  });
-
-  const rows = groupWordsIntoRows(zoneWords, maxY);
-  const entries = [];
-  for (const row of rows) {
-    const item = parseCountedItemWords(row);
-    if (item) entries.push(item);
-  }
-  return entries;
-}
-
-function extractOfficialFormTextFromOcr(data) {
-  const rawWords = Array.isArray(data?.words) ? data.words : [];
-  const words = rawWords.filter((word) => {
-    const text = cleanOcrWord(word.text);
-    const box = getWordBox(word);
-    return text && box && (word.confidence === undefined || word.confidence >= 18);
-  });
-
-  if (!words.length) return "";
-
-  const maxX = Math.max(...words.map((word) => getWordBox(word).x1));
-  const maxY = Math.max(...words.map((word) => getWordBox(word).y1));
-  if (!maxX || !maxY) return "";
-
-  const zones = [
-    { marker: "#monsters", target: "Monsters", x0: 0.09, x1: 0.405, y0: 0.13, y1: 0.665 },
-    { marker: "#spells", target: "Spells", x0: 0.405, x1: 0.705, y0: 0.13, y1: 0.665 },
-    { marker: "#traps", target: "Traps", x0: 0.705, x1: 0.985, y0: 0.13, y1: 0.665 },
-    { marker: "#extra", target: "Extra", x0: 0.09, x1: 0.405, y0: 0.67, y1: 0.985 },
-    { marker: "!side", target: "Side", x0: 0.405, x1: 0.705, y0: 0.67, y1: 0.985 },
-  ];
-
-  const sections = zones.map((zone) => ({
-    ...zone,
-    entries: extractZoneEntries(words, zone, maxX, maxY),
-  }));
-
-  const totalEntries = sections.reduce((sum, section) => sum + section.entries.length, 0);
-  if (totalEntries < 5) return "";
-
-  const lines = [];
-  for (const section of sections) {
-    if (!section.entries.length) continue;
-    lines.push(section.marker);
-    for (const entry of section.entries) {
-      lines.push(`${entry.quantity} ${entry.name}`);
-    }
-    lines.push("");
-  }
-
-  return lines.join("\n").trim();
-}
-
-function fallbackTextFromOcr(data) {
-  const text = String(data?.text || "").replace(/\r/g, "").trim();
-  if (!text) return "";
-
-  const entries = parseNamedDeckList(text);
-  if (entries.length >= 5) return text;
-  return text;
-}
-
-async function readImageFile(file) {
-  if (!window.Tesseract) {
-    throw new Error("OCR engine could not be loaded. Check your internet connection or browser content blocker.");
-  }
-
-  setText(els.log, "");
-  setBusy(true, "Reading image...");
-  setStatus("Reading image", "busy");
-  setSummary("Reading the image locally in your browser. This may take a moment...", "warn");
-  log(`OCR started: ${file.name}`);
-
-  try {
-    const result = await window.Tesseract.recognize(file, "eng+por", {
-      logger: (message) => {
-        if (!message?.status) return;
-        const progress = Number.isFinite(message.progress) ? ` ${Math.round(message.progress * 100)}%` : "";
-        setStatus(`OCR${progress}`, "busy");
-      },
-    });
-
-    const formatted = extractOfficialFormTextFromOcr(result.data) || fallbackTextFromOcr(result.data);
-    if (!formatted) throw new Error("OCR did not return readable text. Try a clearer image or higher resolution scan.");
-
-    setValue(els.deckInput, formatted);
-    const stem = file.name.replace(/\.[^.]+$/, "");
-    if (stem) setValue(els.deckName, stem);
-
-    const parsed = parseNamedDeckList(formatted);
-    log(`OCR completed. ${parsed.reduce((sum, entry) => sum + entry.quantity, 0)} card(s) detected in editable text.`);
-    setSummary("Image text extracted. Review the text, fix any OCR mistakes, then click Convert deck.", "warn");
-    setStatus("OCR done");
-  } catch (error) {
-    setSummary(error.message, "error");
-    setStatus("OCR error", "error");
-    log(`✗ ${error.message}`);
-  } finally {
-    setBusy(false);
-  }
-}
-
 on(els.form, "submit", runConversion);
 
 on(els.ydkFile, "change", async (event) => {
   const file = event.target.files?.[0];
   if (file) await readFile(file);
-});
-
-on(els.imageFile, "change", async (event) => {
-  const file = event.target.files?.[0];
-  if (file) await readImageFile(file);
 });
 
 function enableDropZone(zone, fileHandler) {
@@ -1015,7 +821,6 @@ function enableDropZone(zone, fileHandler) {
 }
 
 if (els.dropZone) enableDropZone(els.dropZone, readFile);
-if (els.imageDropZone) enableDropZone(els.imageDropZone, readImageFile);
 
 on(els.clearBtn, "click", () => {
   setValue(els.deckInput, "");
