@@ -192,19 +192,39 @@ input:focus, textarea:focus {
 .file-icon { font-size: 2rem; }
 .file-drop small { color: var(--muted); }
 
-.fixed-options {
+.drop-grid {
   display: grid;
-  gap: 8px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 12px;
-  margin-bottom: 16px;
-  color: var(--muted);
-  background: rgba(255, 255, 255, 0.035);
-  font-size: 0.9rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
-.fixed-options strong { color: var(--text); }
+.drop-grid .file-drop {
+  margin-bottom: 0;
+  min-height: 132px;
+}
+
+.ocr-note {
+  margin: 0 0 12px;
+  border: 1px solid rgba(78, 204, 163, 0.22);
+  border-radius: 16px;
+  padding: 12px;
+  color: var(--accent-2);
+  background: rgba(78, 204, 163, 0.07);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.disclaimer {
+  margin: 0 0 16px;
+  border: 1px solid rgba(245, 166, 35, 0.28);
+  border-radius: 16px;
+  padding: 12px;
+  color: var(--warning);
+  background: rgba(245, 166, 35, 0.09);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
 
 .actions, .button-row {
   display: flex;
@@ -333,6 +353,10 @@ input:focus, textarea:focus {
   .panel {
     border-radius: 18px;
     padding: 16px;
+  }
+
+  .drop-grid {
+    grid-template-columns: 1fr;
   }
 
   .actions > button {

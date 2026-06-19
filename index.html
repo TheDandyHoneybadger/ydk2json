@@ -3,19 +3,18 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>YDK / YDKE → JSON Converter</title>
-  <meta name="description" content="Static YDK and YDKE deck converter to compact Dracotail/Konami strict JSON." />
-  <link rel="stylesheet" href="styles.css?v=20260619-fix2" />
+  <title>YDK / YDKE / Image → JSON Converter</title>
+  <meta name="description" content="Static Yu-Gi-Oh! YDK, YDKE and deck list image converter to JSON." />
+  <link rel="stylesheet" href="styles.css?v=20260619-ocr1" />
 </head>
 <body>
   <main class="app-shell">
     <section class="hero card">
       <div>
         <p class="eyebrow">Yu-Gi-Oh! Deck Converter</p>
-        <h1>YDK / YDKE → JSON</h1>
+        <h1>YDK / YDKE / Image → JSON</h1>
         <p class="subtitle">
-          Convert <strong>ydke://</strong> codes and <strong>.ydk</strong> files into compact
-          <strong>Dracotail / Konami strict</strong> JSON using the official Konami ID returned by YGOPRODECK.
+          Convert <strong>ydke://</strong> codes, <strong>.ydk</strong> files, pasted deck lists, and deck list images into JSON using the official Konami ID returned by YGOPRODECK.
         </p>
       </div>
       <div class="status-pill" id="statusPill">Ready</div>
@@ -34,26 +33,36 @@
         </label>
 
         <label class="field grow-field">
-          <span>Paste a YDKE code or .YDK content</span>
-          <textarea id="deckInput" spellcheck="false" placeholder="ydke://...&#10;&#10;or&#10;&#10;#main&#10;89631139&#10;...&#10;#extra&#10;...&#10;!side&#10;..."></textarea>
+          <span>Paste a YDKE code, .YDK content, or reviewed OCR text</span>
+          <textarea id="deckInput" spellcheck="false" placeholder="ydke://...&#10;&#10;or&#10;&#10;#main&#10;89631139&#10;...&#10;#extra&#10;...&#10;!side&#10;...&#10;&#10;or&#10;&#10;#monsters&#10;3 Ash Blossom & Joyous Spring&#10;#spells&#10;1 Called by the Grave&#10;#traps&#10;1 Infinite Impermanence&#10;#extra&#10;...&#10;!side&#10;..."></textarea>
         </label>
 
-        <label class="file-drop" id="dropZone">
-          <input id="ydkFile" type="file" accept=".ydk,text/plain" />
-          <span class="file-icon">📂</span>
-          <strong>Import .ydk file</strong>
-          <small>or drag it here</small>
-        </label>
+        <div class="drop-grid">
+          <label class="file-drop" id="dropZone">
+            <input id="ydkFile" type="file" accept=".ydk,text/plain" />
+            <span class="file-icon">📂</span>
+            <strong>Import .ydk file</strong>
+            <small>or drag it here</small>
+          </label>
 
-        <div class="fixed-options" aria-label="Fixed conversion settings">
-          <span>Format: <strong>Dracotail / Konami strict</strong></span>
-          <span>Sections: <strong>Main + Extra + Side</strong></span>
-          <span>Output: <strong>Compact JSON</strong></span>
+          <label class="file-drop" id="imageDropZone">
+            <input id="imageFile" type="file" accept="image/*" />
+            <span class="file-icon">🖼️</span>
+            <strong>Read deck list image</strong>
+            <small>OCR creates editable text</small>
+          </label>
         </div>
+
+        <p class="ocr-note">
+          Image OCR can make mistakes. Review the extracted text before converting, especially card names, quantities, Extra Deck, and Side Deck.
+        </p>
+
+        <p class="disclaimer">
+          Disclaimer: this website is not responsible for deck list errors. Always review the generated list before using it in events, registrations, or submissions.
+        </p>
 
         <div class="actions">
           <button type="submit" class="primary-button" id="convertBtn">Convert deck</button>
-          <button type="button" class="secondary-button" id="clearCacheBtn">Clear cache</button>
         </div>
       </form>
 
@@ -77,6 +86,7 @@
     </section>
   </main>
 
-  <script src="app.js?v=20260619-fix2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="app.js?v=20260619-ocr1"></script>
 </body>
 </html>
