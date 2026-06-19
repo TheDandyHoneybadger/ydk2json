@@ -16,6 +16,19 @@ const EXTRA_TYPES = new Set([
 ]);
 
 const $ = (selector) => document.querySelector(selector);
+const on = (element, eventName, handler) => {
+  if (element) element.addEventListener(eventName, handler);
+};
+const valueOf = (element, fallback = "") => {
+  if (!element || !("value" in element)) return fallback;
+  return element.value;
+};
+const setValue = (element, value) => {
+  if (element && "value" in element) element.value = value;
+};
+const setText = (element, value) => {
+  if (element) element.textContent = value;
+};
 
 const state = {
   lastJson: "",
@@ -63,23 +76,25 @@ function sleep(ms) {
 
 function log(message) {
   const now = new Date().toLocaleTimeString("en-US", { hour12: false });
+  if (!els.log) return;
   els.log.textContent += `[${now}] ${message}\n`;
   els.log.scrollTop = els.log.scrollHeight;
 }
 
 function setStatus(message, mode = "ready") {
-  els.statusPill.textContent = message;
-  els.statusPill.classList.toggle("busy", mode === "busy");
-  els.statusPill.classList.toggle("error", mode === "error");
+  setText(els.statusPill, message);
+  els.statusPill?.classList.toggle("busy", mode === "busy");
+  els.statusPill?.classList.toggle("error", mode === "error");
 }
 
 function setSummary(message, mode = "ready") {
-  els.summary.textContent = message;
-  els.summary.classList.toggle("error", mode === "error");
-  els.summary.classList.toggle("warn", mode === "warn");
+  setText(els.summary, message);
+  els.summary?.classList.toggle("error", mode === "error");
+  els.summary?.classList.toggle("warn", mode === "warn");
 }
 
 function setBusy(isBusy) {
+  if (!els.convertBtn) return;
   els.convertBtn.disabled = isBusy;
   els.convertBtn.textContent = isBusy ? "Converting..." : "Convert deck";
 }
@@ -328,15 +343,15 @@ function sanitizeFilename(name) {
 
 async function runConversion(event) {
   event?.preventDefault();
-  els.log.textContent = "";
+  setText(els.log, "");
   setBusy(true);
   setStatus("Converting", "busy");
   setSummary("Resolving cards and building compact JSON...", "warn");
 
   try {
-    const input = els.deckInput.value;
+    const input = valueOf(els.deckInput);
     const sections = detectAndParse(input);
-    const deckName = els.deckName.value.trim() || "My Deck";
+    const deckName = valueOf(els.deckName, "My Deck").trim() || "My Deck";
     const totalCards = getAllIds(sections).length;
 
     if (!totalCards) {
@@ -351,14 +366,14 @@ async function runConversion(event) {
 
     state.lastJson = JSON.stringify(result);
     state.lastDeckName = deckName;
-    els.output.textContent = state.lastJson;
+    setText(els.output, state.lastJson);
 
     setSummary(summarize(result));
     setStatus("Done");
     log("Conversion completed.");
   } catch (error) {
     state.lastJson = "";
-    els.output.textContent = `Error:\n\n${error.message}`;
+    setText(els.output, `Error:\n\n${error.message}`);
     setSummary(error.message, "error");
     setStatus("Error", "error");
     log(`✗ ${error.message}`);
@@ -369,55 +384,55 @@ async function runConversion(event) {
 
 async function readFile(file) {
   const text = await file.text();
-  els.deckInput.value = text;
+  setValue(els.deckInput, text);
   const stem = file.name.replace(/\.[^.]+$/, "");
-  if (stem) els.deckName.value = stem;
+  if (stem) setValue(els.deckName, stem);
   setSummary(`File '${file.name}' loaded. Click convert.`, "warn");
 }
 
-els.form.addEventListener("submit", runConversion);
+on(els.form, "submit", runConversion);
 
-els.ydkFile.addEventListener("change", async (event) => {
+on(els.ydkFile, "change", async (event) => {
   const file = event.target.files?.[0];
   if (file) await readFile(file);
 });
 
 ["dragenter", "dragover"].forEach((eventName) => {
-  els.dropZone.addEventListener(eventName, (event) => {
+  on(els.dropZone, eventName, (event) => {
     event.preventDefault();
-    els.dropZone.classList.add("dragover");
+    els.dropZone?.classList.add("dragover");
   });
 });
 
 ["dragleave", "drop"].forEach((eventName) => {
-  els.dropZone.addEventListener(eventName, (event) => {
+  on(els.dropZone, eventName, (event) => {
     event.preventDefault();
-    els.dropZone.classList.remove("dragover");
+    els.dropZone?.classList.remove("dragover");
   });
 });
 
-els.dropZone.addEventListener("drop", async (event) => {
+on(els.dropZone, "drop", async (event) => {
   const file = event.dataTransfer.files?.[0];
   if (file) await readFile(file);
 });
 
-els.clearBtn.addEventListener("click", () => {
-  els.deckInput.value = "";
-  els.output.textContent = "";
-  els.log.textContent = "";
+on(els.clearBtn, "click", () => {
+  setValue(els.deckInput, "");
+  setText(els.output, "");
+  setText(els.log, "");
   state.lastJson = "";
   setSummary("Paste a deck and click convert.");
   setStatus("Ready");
 });
 
-els.clearCacheBtn.addEventListener("click", () => {
+on(els.clearCacheBtn, "click", () => {
   state.cache = {};
   localStorage.removeItem(CACHE_KEY);
   setSummary("Local cache cleared.", "warn");
   log("Local cache cleared.");
 });
 
-els.copyBtn.addEventListener("click", async () => {
+on(els.copyBtn, "click", async () => {
   if (!state.lastJson) return setSummary("No generated JSON to copy.", "warn");
   try {
     await navigator.clipboard.writeText(state.lastJson);
@@ -435,7 +450,7 @@ els.copyBtn.addEventListener("click", async () => {
   setSummary("JSON copied to clipboard.");
 });
 
-els.downloadBtn.addEventListener("click", () => {
+on(els.downloadBtn, "click", () => {
   if (!state.lastJson) return setSummary("No generated JSON to download.", "warn");
   const blob = new Blob([state.lastJson], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
